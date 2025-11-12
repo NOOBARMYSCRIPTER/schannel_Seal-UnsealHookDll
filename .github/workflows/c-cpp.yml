@@ -1,0 +1,65 @@
+name: Build check_schannel.dll
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-msvc:
+    name: Build (MSVC) on Windows
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Find Visual Studio and set MSVC environment
+        shell: powershell
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          if (-Not (Test-Path $vswhere)) {
+            Write-Error "vswhere not found at $vswhere"
+            exit 1
+          }
+          $inst = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (-not $inst) {
+            Write-Error "Visual Studio with VC tools not found"
+            exit 1
+          }
+          Write-Host "Found Visual Studio at: $inst"
+          $vcvars = Join-Path $inst "VC\Auxiliary\Build\vcvarsall.bat"
+          if (-not (Test-Path $vcvars)) {
+            Write-Error "vcvarsall.bat not found at $vcvars"
+            exit 1
+          }
+          $vcvars | Out-File -FilePath vcvars_path.txt -Encoding ascii
+
+      - name: Compile with MSVC (x64)
+        shell: cmd
+        run: |
+          setlocal enabledelayedexpansion
+          for /f "usebackq delims=" %%i in ("vcvars_path.txt") do set VCVARS=%%i
+          echo Using vcvars: %VCVARS%
+          call "%VCVARS%" x64
+          REM Компиляция DLL: /LD - create DLL, /O2 optimize
+          cl /LD /O2 check_schannel.cpp user32.lib /Fe:check_schannel.dll
+          if not exist check_schannel.dll (
+            echo "MSVC build failed"
+            exit /b 1
+          )
+
+      - name: Prepare artifacts folder
+        shell: cmd
+        run: |
+          if exist out rmdir /S /Q out
+          mkdir out
+          copy /Y check_schannel.dll out\check_schannel.dll
+          copy /Y MinHook.x64.dll out\MinHook.x64.dll
+
+      - name: Upload artifact (DLL + MinHook)
+        uses: actions/upload-artifact@v4
+        with:
+          name: check_schannel-artifacts
+          path: out
