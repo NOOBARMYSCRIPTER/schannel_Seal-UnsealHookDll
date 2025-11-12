@@ -322,23 +322,31 @@ NTSTATUS WINAPI Hooked_SealMessage(
     return result;
 }
 
-static HMODULE LoadMinHookNearModule(HMODULE hModule)
+static HMODULE LoadMinHookNearModule()
 {
-    if (!hModule) return nullptr;
+    char curDir[MAX_PATH] = {0};
+    if (GetCurrentDirectoryA(MAX_PATH, curDir) && curDir[0] != '\0') {
+        std::string dllPath = std::string(curDir) + "\\MinHook.x64.dll";
+        Logf("[INFO] Trying to load MinHook from current dir: %s", dllPath.c_str());
+        HMODULE h = LoadLibraryA(dllPath.c_str());
+        if (h) {
+            Logf("[OK] Loaded MinHook.dll from current dir: %s", dllPath.c_str());
+            return h;
+        }
+    }
 
-    char modPath[MAX_PATH] = {0};
-    if (!GetModuleFileNameA(hModule, modPath, MAX_PATH)) return nullptr;
-
-    std::string s(modPath);
-    size_t pos = s.find_last_of("\\/");
-    std::string dir = (pos == std::string::npos) ? "." : s.substr(0, pos);
-    std::string dllPath = dir + "\\MinHook.x64.dll";
-
-    Logf("[INFO] Trying to load MinHook from: %s", dllPath.c_str());
-    HMODULE h = LoadLibraryA(dllPath.c_str());
-    if (h) {
-        Logf("[OK] Loaded MinHook.dll from module dir: %s", dllPath.c_str());
-        return h;
+    char exePath[MAX_PATH] = {0};
+    if (GetModuleFileNameA(NULL, exePath, MAX_PATH)) {
+        std::string sExe(exePath);
+        size_t posExe = sExe.find_last_of("\\/");
+        std::string exeDir = (posExe == std::string::npos) ? "." : sExe.substr(0, posExe);
+        std::string dllFromExe = exeDir + "\\MinHook.x64.dll";
+        Logf("[INFO] Trying to load MinHook from exe dir: %s", dllFromExe.c_str());
+        HMODULE h = LoadLibraryA(dllFromExe.c_str());
+        if (h) {
+            Logf("[OK] Loaded MinHook.dll from exe dir: %s", dllFromExe.c_str());
+            return h;
+        }
     }
 
     char sysPath[MAX_PATH];
@@ -346,7 +354,7 @@ static HMODULE LoadMinHookNearModule(HMODULE hModule)
     if (n && n < MAX_PATH) {
         std::string dllSys = std::string(sysPath) + "\\MinHook.x64.dll";
         Logf("[INFO] Trying to load MinHook from system dir: %s", dllSys.c_str());
-        h = LoadLibraryA(dllSys.c_str());
+        HMODULE h = LoadLibraryA(dllSys.c_str());
         if (h) {
             Logf("[OK] Loaded MinHook.dll from system dir: %s", dllSys.c_str());
             return h;
@@ -395,7 +403,7 @@ DWORD WINAPI WorkerThread(LPVOID)
         return 2;
     }
 
-    hMinHookDll = LoadMinHookNearModule(hSchannel);
+    hMinHookDll = LoadMinHookNearModule();
     if (!hMinHookDll) return 3;
 
     pMH_Initialize   = (PFN_MH_Initialize)GetProcAddress(hMinHookDll, "MH_Initialize");
