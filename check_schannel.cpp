@@ -274,17 +274,17 @@ NTSTATUS WINAPI Hooked_SealMessage(
                 if (pAE) {
                     char* pLineEnd = (char*)memmem_impl(pAE, len - (pAE - data), "\r\n", 2);
                     if (pLineEnd) {
-                        char* pBr = (char*)memmem_impl(pAE, pLineEnd - pAE, "br", 2);
-                        if (pBr) {
-                            if (pBr > pAE + 16 && *(pBr - 1) == ' ') pBr--;
-                            if (pBr > pAE + 16 && *(pBr - 1) == ',') pBr--;
+                        char* pValueStart = pAE + 16;
+                        while (pValueStart < pLineEnd && (*pValueStart == ' ')) pValueStart++;
             
-                            char* pBrEnd = (char*)memmem_impl(pBr, pLineEnd - pBr, "br", 2) + 2;
-                            size_t gap = pBrEnd - pBr;
-            
-                            memset(pBr, ' ', gap);
+                        if (pLineEnd > pValueStart) {
+                            memset(pValueStart, ' ', pLineEnd - pValueStart);
                             
-                            Logf("[MOD] Successfully sanitized Accept-Encoding (removed br)");
+                            if (pLineEnd - pValueStart >= 8) {
+                                memcpy(pValueStart, "identity", 8);
+                            }
+                            
+                            Logf("[MOD] Force disabled all compression (identity mode)");
                         }
                     }
                 }
