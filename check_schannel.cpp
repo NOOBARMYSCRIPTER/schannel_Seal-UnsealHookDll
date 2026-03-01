@@ -263,19 +263,25 @@ NTSTATUS WINAPI Hooked_SealMessage(
          ContextHandle, QualityOfProtection, MessageBuffers, MessageSequenceNumber);
 
     if (MessageBuffers) {
-        SecBufferDesc* desc = reinterpret_cast<SecBufferDesc*>(MessageBuffers);
-        for (ULONG i = 0; i < desc->cBuffers; ++i) {
-            SecBuffer& buf = desc->pBuffers[i];
-            if (buf.BufferType == 1 && buf.pvBuffer) {
-                char* pAccept = (char*)memmem_impl(buf.pvBuffer, buf.cbBuffer, "Accept-Encoding:", 16);
-                if (pAccept) {
-                    char* pEnd = (char*)memmem_impl(pAccept, buf.cbBuffer - (pAccept - (char*)buf.pvBuffer), "\r\n", 2);
-                    if (pEnd) {
-                        char* pBr = (char*)memmem_impl(pAccept, pEnd - pAccept, "br", 2);
-                        if (pBr) {
-                            pBr[0] = ' '; pBr[1] = ' '; 
-                            Logf("[MOD] Disabled Brotli in request headers");
-                        }
+        if (buf.BufferType == 1 && buf.pvBuffer) {
+            char* data = (char*)buf.pvBuffer;
+            uint32_t len = buf.cbBuffer;
+        
+            char* pAE = (char*)memmem_impl(data, len, "Accept-Encoding:", 16);
+            if (pAE) {
+                char* pLineEnd = (char*)memmem_impl(pAE, len - (pAE - data), "\r\n", 2);
+                if (pLineEnd) {
+                    char* pBr = (char*)memmem_impl(pAE, pLineEnd - pAE, "br", 2);
+                    if (pBr) {
+                        if (pBr > pAE + 16 && *(pBr - 1) == ' ') pBr--;
+                        if (pBr > pAE + 16 && *(pBr - 1) == ',') pBr--;
+        
+                        char* pBrEnd = (char*)memmem_impl(pBr, pLineEnd - pBr, "br", 2) + 2;
+                        size_t gap = pBrEnd - pBr;
+        
+                        memset(pBr, ' ', gap);
+                        
+                        Logf("[MOD] Successfully sanitized Accept-Encoding (removed br)");
                     }
                 }
             }
